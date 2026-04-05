@@ -26,6 +26,49 @@ The challenge runs from March 18th to April 30th.
 
 Happy training!
 
+## My Techniques & Additions
+
+This fork includes a superset of all top-leaderboard techniques plus several novel additions:
+
+### Architecture
+- **11 layers / 512d / 8 heads / 4 KV heads** with GQA
+- **3x MLP expansion** with **LeakyReLU(0.5)²** activation (improves gradient flow over ReLU²)
+- **SmearGate** -- smooth gating mechanism for better information flow
+- **BigramHash(2048)** -- enhanced bigram features with larger hash table
+- **Cross-Shared Attention (XSA)** on last 4 layers for parameter efficiency
+- **Partial RoPE** (16/64 dims) -- reduces rotational overhead while preserving positional info
+- **ValueEmbedding (VE128)** on layers 9-10 for richer value representations
+- **LN Scale** -- 1/sqrt(layer+1) layer norm scaling
+
+### Quantization & Compression
+- **GPTQ-lite int6** with Hessian-aware block-wise quantization (novel over SOTA's simple per-row int6)
+- **FWHT rotation** (Fast Walsh-Hadamard Transform) before quantization to decorrelate weight columns, reducing quantization error
+- **Best-of-5 clipping percentile search** for optimal scale factors
+- **LZMA compression** for final artifact
+- **Late QAT** triggered at warmdown threshold 0.15
+
+### Weight Averaging
+- **EMA(0.997)** with decay scheduling -- replaces SWA for smoother convergence
+- **LAWA** (Lookahead Weight Averaging) support
+- **Conflict detection** between averaging modes
+
+### Training & Optimization
+- **Parameter Banking + Parallel Muon** optimizer
+- **Post-reduce-scatter gradient clipping** -- clips on averaged gradients (more correct than pre-reduce)
+- **Distributed gradient sync fixed** -- all-reduce before clip
+- **FlashAttention 3 fallback** for non-FA3 environments
+- **MTP heads** -- multi-token prediction (train-only, excluded from export)
+
+### Test-Time Training
+- **Legal TTT (score-first protocol)** -- val tokens scored first, then trained on already-scored tokens
+- SGD(lr=0.002, momentum=0.9), 3 epochs, cosine LR decay, grad clip 1.0
+- Non-overlapping 32K-token chunks, last chunk scored but never trained on
+
+### Novel Additions (Untested)
+- **Gated Attention** -- novel attention gating mechanism
+- **Value Residual** -- residual connections on value projections
+- Both are untested on GPU and need ablation to confirm benefit
+
 ## Leaderboard
 
 | Run | Score | Author | Summary | Date | Info |
