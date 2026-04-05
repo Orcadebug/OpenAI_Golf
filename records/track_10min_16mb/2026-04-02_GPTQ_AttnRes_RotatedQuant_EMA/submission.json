@@ -1,0 +1,9 @@
+{
+  "name": "GPTQ-lite + Rotated Quant + EMA + LeakyReLU² + TTT",
+  "val_bpb": null,
+  "bytes_total": null,
+  "blurb": "GPTQ-lite quantization with FWHT rotation, LeakyReLU(0.5)² activation, EMA(0.997), legal score-first TTT, partial RoPE, XSA4, LN scaling, BigramHash(2048), VE128 layers 9-10. Built on PR #414/#399/#461 stack.",
+  "author": "saipittala",
+  "github_id": "saipittala",
+  "date": "2026-04-02"
+}
