@@ -8,7 +8,6 @@ import os
 import random
 import sys
 import time
-import uuid
 import zlib
 from pathlib import Path
 try:
@@ -74,13 +73,13 @@ class Hyperparameters:
     train_files = os.path.join(data_path, "fineweb_train_*.bin")
     val_files = os.path.join(data_path, "fineweb_val_*.bin")
     tokenizer_path = os.environ.get("TOKENIZER_PATH", "./data/tokenizers/fineweb_1024_bpe.model")
-    run_id = os.environ.get("RUN_ID", str(uuid.uuid4()))
+    run_id = os.environ.get("RUN_ID", f"run_{time.time_ns()}")
     seed = int(os.environ.get("SEED", 1337))
     val_batch_size = int(os.environ.get("VAL_BATCH_SIZE", 524_288))
     val_loss_every = int(os.environ.get("VAL_LOSS_EVERY", 4000))
     train_log_every = int(os.environ.get("TRAIN_LOG_EVERY", 500))
     iterations = int(os.environ.get("ITERATIONS", 20000))
-    warmdown_iters = int(os.environ.get("WARMDOWN_ITERS", 3500))
+    warmdown_iters = int(os.environ.get("WARMDOWN_ITERS", 4000))
     warmup_steps = int(os.environ.get("WARMUP_STEPS", 20))
     train_batch_tokens = int(os.environ.get("TRAIN_BATCH_TOKENS", 786_432))
     train_seq_len = int(os.environ.get("TRAIN_SEQ_LEN", 2048))
@@ -125,9 +124,9 @@ class Hyperparameters:
     muon_wd = float(os.environ.get("MUON_WD", 0.04))
     adam_wd = float(os.environ.get("ADAM_WD", 0.04))
     qat_enabled = bool(int(os.environ.get("QAT_ENABLED", "0")))
-    bigram_vocab_size = int(os.environ.get("BIGRAM_VOCAB_SIZE", 2048))
-    bigram_dim = int(os.environ.get("BIGRAM_DIM", 128))
-    xsa_last_n = int(os.environ.get("XSA_LAST_N", 4))
+    bigram_vocab_size = int(os.environ.get("BIGRAM_VOCAB_SIZE", 3072))
+    bigram_dim = int(os.environ.get("BIGRAM_DIM", 112))
+    xsa_last_n = int(os.environ.get("XSA_LAST_N", 11))
     rope_dims = int(os.environ.get("ROPE_DIMS", 16))
     ln_scale = bool(int(os.environ.get("LN_SCALE", "1")))
     dtg_enabled = bool(int(os.environ.get("DTG_ENABLED", "0")))
@@ -145,7 +144,6 @@ class Hyperparameters:
     ttt_momentum = float(os.environ.get("TTT_MOMENTUM", 0.9))
     ttt_batch_seqs = int(os.environ.get("TTT_BATCH_SEQS", 32))
     ttt_grad_clip = float(os.environ.get("TTT_GRAD_CLIP", 1.0))
-    attn_res = bool(int(os.environ.get("ATTN_RES", "0")))
     gptq_enabled = bool(int(os.environ.get("GPTQ_ENABLED", "1")))
     gptq_calib_seqs = int(os.environ.get("GPTQ_CALIB_SEQS", "32"))
     gptq_calib_len = int(os.environ.get("GPTQ_CALIB_LEN", "256"))
@@ -478,7 +476,7 @@ CONTROL_TENSOR_NAME_PATTERNS = tuple(
     pattern
     for pattern in os.environ.get(
         "CONTROL_TENSOR_NAME_PATTERNS",
-        "attn_scale,attn_scales,mlp_scale,mlp_scales,resid_mix,resid_mixes,q_gain,skip_weight,skip_weights,smear,dtg_gate,ve_layer_scales,ve_shared.scale,attn_gate,vr_lambda,attn_res_queries",
+        "attn_scale,attn_scales,mlp_scale,mlp_scales,resid_mix,resid_mixes,q_gain,skip_weight,skip_weights,smear,dtg_gate,ve_layer_scales,ve_shared.scale,attn_gate,vr_lambda",
     ).split(",")
     if pattern
 )
@@ -842,7 +840,6 @@ class GPT(nn.Module):
         ve_layers: str = "9,10",
         gated_attention: bool = False,
         value_residual: bool = False,
-        attn_res: bool = False,
     ):
         super().__init__()
         self._ve_target_dim = num_kv_heads * (model_dim // num_heads)  # kv_dim for value projection
@@ -915,11 +912,6 @@ class GPT(nn.Module):
         if xsa_last_n > 0:
             for i in range(max(0, num_layers - xsa_last_n), num_layers):
                 self.blocks[i].attn.use_xsa = True
-        self.attn_res = attn_res
-        if attn_res:
-            self.attn_res_queries = nn.ParameterList(
-                [nn.Parameter(torch.zeros(model_dim, dtype=torch.float32)) for _ in range(num_layers)]
-            )
         self._init_weights()
     def _init_weights(self) -> None:
         if self.tie_embeddings:
@@ -960,14 +952,7 @@ class GPT(nn.Module):
         v0 = None
         skips: list[Tensor] = []
         ve_cache: dict = {}
-        layer_outs: list[Tensor] = [x] if self.attn_res else []
         for i in range(self.num_encoder_layers):
-            if self.attn_res:
-                V = torch.stack(layer_outs)
-                K = F.rms_norm(V, (V.size(-1),))
-                w = self.attn_res_queries[i].to(dtype=K.dtype)
-                alpha = torch.einsum('d, n b t d -> n b t', w, K).softmax(0)
-                x = torch.einsum('n b t, n b t d -> b t d', alpha, V)
             ve = self._get_ve(i, input_ids, ve_cache)
             x, raw_v = self.blocks[i](x, x0,
                 self.qo_bank[i], self.kv_bank[i], self.kv_bank[n + i],
@@ -976,16 +961,8 @@ class GPT(nn.Module):
             if v0 is None and raw_v is not None:
                 v0 = raw_v
             skips.append(x)
-            if self.attn_res:
-                layer_outs.append(x)
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
-            if self.attn_res:
-                V = torch.stack(layer_outs)
-                K = F.rms_norm(V, (V.size(-1),))
-                w = self.attn_res_queries[bi].to(dtype=K.dtype)
-                alpha = torch.einsum('d, n b t d -> n b t', w, K).softmax(0)
-                x = torch.einsum('n b t, n b t d -> b t d', alpha, V)
             if skips:
                 x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
             ve = self._get_ve(bi, input_ids, ve_cache)
@@ -993,14 +970,6 @@ class GPT(nn.Module):
                 self.qo_bank[bi], self.kv_bank[bi], self.kv_bank[n + bi],
                 self.qo_bank[n + bi], self.mlp_up_bank[bi], self.mlp_down_bank[bi],
                 v_embed=ve, v0=v0)
-            if self.attn_res:
-                layer_outs.append(x)
-        if self.attn_res:
-            V = torch.stack(layer_outs)
-            K = F.rms_norm(V, (V.size(-1),))
-            w_final = torch.stack([q for q in self.attn_res_queries]).mean(0).to(dtype=K.dtype)
-            alpha = torch.einsum('d, n b t d -> n b t', w_final, K).softmax(0)
-            x = torch.einsum('n b t, n b t d -> b t d', alpha, V)
         return self.final_norm(x)
     def _logits(self, x: Tensor) -> Tensor:
         if self.tie_embeddings:
@@ -1728,7 +1697,6 @@ def main() -> None:
         ve_layers=args.ve_layers,
         gated_attention=args.gated_attention,
         value_residual=args.value_residual,
-        attn_res=args.attn_res,
     ).to(device).bfloat16()
     base_model.qo_bank.data = base_model.qo_bank.data.float()
     base_model.kv_bank.data = base_model.kv_bank.data.float()
@@ -1769,9 +1737,6 @@ def main() -> None:
         scalar_params.append(base_model.ve_shared.scale)
         for s in base_model.ve_layer_scales:
             scalar_params.append(s)
-    if args.attn_res:
-        for q in base_model.attn_res_queries:
-            scalar_params.append(q)
     optimizer_tok = torch.optim.AdamW(
         tok_params,
         betas=(args.beta1, args.beta2),
@@ -2072,7 +2037,7 @@ def main() -> None:
     quant_buf = io.BytesIO()
     torch.save({"w": quant_result, "m": quant_meta}, quant_buf)
     quant_raw = quant_buf.getvalue()
-    quant_blob = lzma.compress(quant_raw, preset=6)
+    quant_blob = lzma.compress(quant_raw, preset=9)
     if master_process:
         with open("final_model.int6.ptz", "wb") as f:
             f.write(quant_blob)
@@ -2102,7 +2067,6 @@ def main() -> None:
         rope_dims=args.rope_dims, ln_scale=args.ln_scale, dtg=args.dtg_enabled,
         ve_enabled=args.ve_enabled, ve_dim=args.ve_dim, ve_layers=args.ve_layers,
         gated_attention=args.gated_attention, value_residual=args.value_residual,
-        attn_res=args.attn_res,
     ).to(device).bfloat16()
     eval_model.qo_bank.data = eval_model.qo_bank.data.float()
     eval_model.kv_bank.data = eval_model.kv_bank.data.float()
