@@ -8,6 +8,59 @@
 
 ---
 
+## Competition Guardrails
+
+These rules apply to every future submission change in this fork.
+
+- Apply your own techniques first. Borrowed ideas should be used to strengthen your stack, not replace it by default.
+- Do not copy code from OpenAI records, leaderboard repos, or other submissions. Reuse ideas, hyperparameters, architecture patterns, evaluation recipes, and quantization strategies only after re-implementing them locally.
+- Every claimed technique must map to a real code path, default setting, or clearly documented opt-in flag in `train_gpt.py`.
+- README claims must be truthful and split into one of three states: active by default, implemented but optional, or planned / not yet implemented.
+- Do not train on validation data. Test-time training must remain score-first and only update on tokens that have already been scored.
+- Do not hide external assets, downloads, or extra compute in evaluation. The submission must remain self-contained and reproducible under the challenge rules.
+- The final artifact budget is decimal 16,000,000 bytes including code bytes plus compressed model bytes.
+
+## Borrow Strategy, Not Code
+
+Use top submissions and OpenAI records as idea references, not as implementation sources.
+
+1. Read the record README and identify the idea, not the code.
+2. Re-implement the idea in this fork using your own structure and naming.
+3. Verify the feature is actually active in logs, defaults, or export-time behavior.
+4. Only then update README claims or submission notes.
+
+Allowed borrowing:
+- run configuration choices
+- architecture and quantization ideas
+- calibration and evaluation strategies
+- artifact-compression choices
+
+Not allowed:
+- copying record code blocks or functions
+- copying a submission folder and renaming it
+- claiming a technique is present when it is only planned
+
+## Technique Application Checklist
+
+Before promoting any technique into a submission recipe, confirm all of the following:
+
+- The technique has a named implementation site in `train_gpt.py`.
+- The default value matches the intended submission recipe, or the exact env flag is documented.
+- There is a concrete signal that proves it ran: startup config, train log, eval log, or export log.
+- The README classifies it correctly as default, optional, or planned.
+- The technique does not violate validation, artifact, or evaluation rules.
+- If the technique was inspired by another submission, the implementation is local and independently written.
+
+Current high-priority items that must be verified before claiming a new record-style stack:
+- XSA scope: current code still defaults to last 4 layers, not all 11.
+- BigramHash defaults: current code still defaults to `2048 x 128`, not `3072 x 112`.
+- WARMDOWN: current code still defaults to `3500`, not `4000`.
+- GPTQ calibration scale: current code still defaults to `32 x 256`, not a larger record-style calibration pass.
+- LZMA preset: current code still uses `preset=6`, not `preset=9`.
+- Any pruning or reordering claim must stay out of README unless the code path is actually present.
+
+---
+
 ## Current Status
 
 | Metric | Your Code | New SOTA (#1019) | Gap |
@@ -19,10 +72,12 @@
 | RoPE | Partial 16/64 | Same | ✓ |
 | LN Scale | 1/√(layer+1) | Same | ✓ |
 | VE128 | Layers 9-10 | Same | ✓ |
-| TTT | Enabled (default) | **Disabled** | ✗ |
-| Quantization | GPTQ-lite int6 | Full Hessian GPTQ int6 | ✓ (you have GPTQ) |
+| TTT | Disabled by default, optional | **Disabled** | ✓ |
+| Quantization | GPTQ int6 + Hessian capture + FWHT rotation | Full Hessian GPTQ int6 | Partial |
+| GPTQ calibration | AR self-gen `32 x 256` | Larger record-style calibration | ✗ |
 | LZMA | preset=6 | **preset=9** | ✗ |
 | WARMDOWN_ITERS | 3500 | **4000** | ✗ |
+| Claims policy | Mixed defaults vs options in docs | Truthful status split | ✗ |
 | Code size | 98KB | ~89KB | Blocker (over 16MB) |
 | **Artifact** | **16.05MB (OVER)** | **15.91MB (OK)** | **BLOCKER** |
 
@@ -145,6 +200,17 @@ warmdown_iters = int(os.environ.get("WARMDOWN_ITERS", 4000))
 
 Why: Longer warmdown period gives more time for LR decay. Marginal improvement.
 
+### 8. ✅ INCREASE GPTQ CALIBRATION FOR RECORD-STYLE RUNS
+
+For the target 8xH100 recipe, use a larger self-generated calibration pass:
+
+```bash
+GPTQ_CALIB_SEQS=64
+GPTQ_CALIB_LEN=2048
+```
+
+Why: your current GPTQ path is real, but the default calibration pass is still much smaller than stronger record-style GPTQ recipes. Keep the calibration self-generated to stay within the challenge rules.
+
 ---
 
 ## Updated Run Command
@@ -166,8 +232,8 @@ VE_DIM=128 \
 VE_LAYERS=9,10 \
 TTT_ENABLED=0 \
 GPTQ_ENABLED=1 \
-GPTQ_CALIB_SEQS=32 \
-GPTQ_CALIB_LEN=256 \
+GPTQ_CALIB_SEQS=64 \
+GPTQ_CALIB_LEN=2048 \
 GPTQ_TEMPERATURE=0.8 \
 MUON_WD=0.04 \
 ADAM_WD=0.04 \
@@ -262,8 +328,10 @@ You'd need one of:
 - [ ] 4. Line 130: `XSA_LAST_N` default from 4 → 11
 - [ ] 5. Line 83: `WARMDOWN_ITERS` default from 3500 → 4000
 - [ ] 6. Line 2076: LZMA preset from 6 → 9
-- [ ] 7. Verify line 140: `TTT_ENABLED` default is "0"
-- [ ] 8. Verify line 148: `ATTN_RES` default is "0"
+- [ ] 7. Increase GPTQ calibration target for record-style runs (`GPTQ_CALIB_SEQS`, `GPTQ_CALIB_LEN`)
+- [ ] 8. Verify line 140: `TTT_ENABLED` default is "0"
+- [ ] 9. Verify line 148: `ATTN_RES` default is "0"
+- [ ] 10. Update `README.md` claims so defaults, options, and planned ideas are not mixed
 
 ### Testing on Colab (before GPU rental)
 
