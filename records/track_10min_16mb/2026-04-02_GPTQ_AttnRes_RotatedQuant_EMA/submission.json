@@ -1,9 +1,19 @@
 {
-  "name": "GPTQ-lite + Rotated Quant + EMA + LeakyReLU² + TTT",
-  "val_bpb": null,
-  "bytes_total": null,
-  "blurb": "GPTQ-lite quantization with FWHT rotation, LeakyReLU(0.5)² activation, EMA(0.997), legal score-first TTT, partial RoPE, XSA4, LN scaling, BigramHash(2048), VE128 layers 9-10. Built on PR #414/#399/#461 stack.",
-  "author": "saipittala",
-  "github_id": "saipittala",
-  "date": "2026-04-02"
+  "author_name": "Sai Pittala",
+  "github_id": "Orcadebug",
+  "val_bpb": 1.2036,
+  "val_bpb_std": null,
+  "artifact_bytes": 15892471,
+  "train_time_seconds": 580,
+  "eval_time_seconds": 400,
+  "num_seeds": 1,
+  "seeds": [1337],
+  "hardware": "8xH100 SXM",
+  "track": "track_10min_16mb",
+  "tokenizer_variant": "sp8192",
+  "prior_sota_bpb": 1.1194,
+  "prior_sota_pr": 1019,
+  "delta_bpb": -0.0842,
+  "status": "WIP",
+  "notes": "Preliminary 1-seed run completed at step 4000. Full 3-seed run in progress for final statistical validation."
 }
