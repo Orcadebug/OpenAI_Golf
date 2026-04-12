@@ -2,8 +2,10 @@
   "name": "GPTQ-lite + Rotated Quant + EMA + LeakyReLU² + TTT",
   "val_bpb": null,
   "bytes_total": null,
-  "blurb": "GPTQ-lite quantization with FWHT rotation, LeakyReLU(0.5)² activation, EMA(0.997), legal score-first TTT, partial RoPE, XSA4, LN scaling, BigramHash(2048), VE128 layers 9-10. Built on PR #414/#399/#461 stack.",
-  "author": "saipittala",
-  "github_id": "saipittala",
-  "date": "2026-04-02"
+  "blurb": "GPTQ-lite quantization with FWHT rotation, LeakyReLU(0.5)² activation, EMA(0.997), legal score-first TTT, partial RoPE, XSA4, LN scaling, BigramHash(2048), VE128 layers 9-10. Built on PR #414/#399/#461 stack. Infrastructure automated via RunPod Python SDK.",
+  "author": "Sai Pittala",
+  "github_id": "Orcadebug",
+  "date": "2026-04-12",
+  "status": "WIP",
+  "notes": "Single 8xH100 seed run completed, reached val_bpb ~1.20 at step 4000. Full 3-seed run pending for final leaderboard submission."
 }

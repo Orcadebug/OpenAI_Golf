@@ -1,14 +1,15 @@
 # GPTQ-lite + Rotated Quant + EMA + LeakyReLU² + TTT
 
-**val_bpb: TBD** (3-seed mean) | **~TBD MB** | 8xH100 SXM
+**val_bpb: WIP** (single seed: ~1.20 @ step 4000) | **~15.9 MB** (est.) | 8xH100 SXM
 
 ## Results (8xH100 80GB SXM)
 
-| Seed | step_avg | steps | Pre-TTT bpb | **Post-TTT bpb** | TTT gain | Artifact |
-|------|----------|-------|-------------|-----------------|----------|----------|
-| 1337 | TBD | TBD | TBD | **TBD** | TBD | TBD |
-| 42 | TBD | TBD | TBD | **TBD** | TBD | TBD |
-| 2025 | TBD | TBD | TBD | **TBD** | TBD | TBD |
+| Seed | Steps | step_avg | Mid-train (step 4000) | Final (est.) | Status |
+|------|-------|----------|----------------------|--------------|--------|
+| 1337 | 6500+ | ~90ms | **1.2036** | TBD | ✅ Completed (pod exited ~1228s) |
+| 42 | — | — | — | — | ⏳ Pending |
+| 2025 | — | — | — | — | ⏳ Pending |
+| **Mean** | — | — | — | **~1.20** (est.) | **Awaiting 3-seed run** |
 
 ## Key Innovations
 
